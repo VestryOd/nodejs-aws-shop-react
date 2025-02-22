@@ -1,0 +1,74 @@
+# swagger.yaml
+openapi: 3.0.1
+servers:
+  - url: https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev
+info:
+  title: Products Service API
+  version: 1.0.0
+  description: API for managing products
+paths:
+  /products:
+    get:
+      summary: Get all products
+      description: Returns a list of all available products
+      operationId: getProducts
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '500':
+          description: Internal server error
+  /products/{productId}:
+    get:
+      summary: Get product by ID
+      description: Returns a single product by ID
+      operationId: getProductById
+      parameters:
+        - name: productId
+          in: path
+          description: ID of the product to return
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product not found
+        '500':
+          description: Internal server error
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The product unique identifier
+        title:
+          type: string
+          description: The name of the product
+        description:
+          type: string
+          description: Product description
+        price:
+          type: number
+          format: float
+          description: Product price
+        count:
+          type: integer
+          description: Available quantity
+      required:
+        - id
+        - title
+        - price
+        - count
