@@ -16,12 +16,16 @@ This is frontend starter project for nodejs-aws mentoring program. It uses the f
 - [TypeScript](https://www.typescriptlang.org/) as a type checking tool
 
 ## AWS Console
-- CloudFront - https://d260eq4qfts6er.cloudfront.net/
 - S3 Bucket - http://vestry-aws-course-task2-manually.s3-website-us-east-1.amazonaws.com/
 
-## CDK
-- CloudFront - https://duy3t3ceb7kpw.cloudfront.net/
+## CDK (task-2)
+- CloudFront - https://d35r08qiuo8xad.cloudfront.net/
 - S3 Bucket - https://staticsitestack-sitebucket397a1860-31ew02k9f6wp.s3.eu-west-1.amazonaws.com
+
+## API Gateway & Lambdas (task-3)
+- CloudFront - https://d35r08qiuo8xad.cloudfront.net/
+- Products list (Lambda) - https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev/products
+- Product Item by id (lambda) - https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev/products/7567ec4b-b10c-48c5-9345-fc73c48a80a1
 
 ## Available Scripts
 
