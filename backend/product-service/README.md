@@ -8,7 +8,6 @@ The `cdk.json` file tells the CDK Toolkit how to execute your app.
 
 * `npm run build`        compile typescript to js
 * `npm run prebuild`     clean previous build folder
-* `npm run build:layer`  build lambda layers
 * `npm run predeploy`    compile main js & lambda layers
 * `npm run watch`        watch for changes and compile
 * `npm run test`         perform the jest unit tests

@@ -1,0 +1,46 @@
+// src/tests/test-utils.ts
+import { APIGatewayProxyEvent, APIGatewayProxyEventPathParameters } from 'aws-lambda';
+
+export const createMockEvent = (pathParameters: APIGatewayProxyEventPathParameters | null): APIGatewayProxyEvent => ({
+  pathParameters,
+  body: null,
+  headers: {},
+  multiValueHeaders: {},
+  httpMethod: 'GET',
+  isBase64Encoded: false,
+  path: '/products/{id}',
+  queryStringParameters: null,
+  multiValueQueryStringParameters: null,
+  stageVariables: null,
+  requestContext: {
+    accountId: '123456789012',
+    apiId: 'api-id',
+    authorizer: {},
+    protocol: 'HTTP/1.1',
+    httpMethod: 'GET',
+    identity: {
+      accessKey: null,
+      accountId: null,
+      apiKey: null,
+      apiKeyId: null,
+      caller: null,
+      clientCert: null,
+      cognitoAuthenticationProvider: null,
+      cognitoAuthenticationType: null,
+      cognitoIdentityId: null,
+      cognitoIdentityPoolId: null,
+      principalOrgId: null,
+      sourceIp: '127.0.0.1',
+      user: null,
+      userAgent: null,
+      userArn: null,
+    },
+    path: '/products/{id}',
+    stage: 'dev',
+    requestId: 'request-id',
+    requestTimeEpoch: 1234567890,
+    resourceId: 'resource-id',
+    resourcePath: '/products/{id}',
+  },
+  resource: '/products/{id}'
+});

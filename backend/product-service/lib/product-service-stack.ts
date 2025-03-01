@@ -1,6 +1,9 @@
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as cr from 'aws-cdk-lib/custom-resources';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as path from 'path';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 
@@ -9,11 +12,50 @@ export class ProductServiceStack extends cdk.Stack {
   constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // Create layers layer
-    const sharedLayer = new lambda.LayerVersion(this, 'SharedLayer', {
-      code: lambda.Code.fromAsset(path.join(__dirname, '../dist/layers')),
-      compatibleRuntimes: [lambda.Runtime.NODEJS_18_X],
-      description: 'Common utilities and mock data',
+    // Create Products table
+    const productsTable = new dynamodb.Table(this, 'ProductsTable', {
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // Cheapest option for low traffic
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // For development only
+    });
+
+    // Create Stocks table
+    const stocksTable = new dynamodb.Table(this, 'StocksTable', {
+      partitionKey: { name: 'product_id', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Create script for filling tables
+    const fillTablesLambda = new NodejsFunction(this, 'FillTablesFunction', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: path.join(__dirname, '../src/functions/fillTables/index.ts'),
+      handler: 'handler',
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: 'es2020',
+      },
+      environment: {
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCKS_TABLE: stocksTable.tableName,
+      },
+    });
+
+    const createProduct = new NodejsFunction(this, 'CreateProduct', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: path.join(__dirname, '../src/functions/createProduct/index.ts'),
+      handler: 'handler',
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: 'es2020',
+      },
+      environment: {
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCKS_TABLE: stocksTable.tableName,
+      },
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
     const getProductsList = new NodejsFunction(this, 'GetProductsList', {
@@ -25,7 +67,11 @@ export class ProductServiceStack extends cdk.Stack {
         sourceMap: true,
         target: 'es2020',
       },
-      layers: [sharedLayer],
+      environment: {
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCKS_TABLE: stocksTable.tableName,
+      },
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
     const getProductById = new NodejsFunction(this, 'GetProductById', {
@@ -37,8 +83,29 @@ export class ProductServiceStack extends cdk.Stack {
         sourceMap: true,
         target: 'es2020',
       },
-      layers: [sharedLayer],
+      environment: {
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCKS_TABLE: stocksTable.tableName,
+      },
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
+
+    // Grant permissions
+    // Read permissions
+    productsTable.grantReadData(getProductsList);
+    stocksTable.grantReadData(getProductsList);
+
+    productsTable.grantReadData(getProductById);
+    stocksTable.grantReadData(getProductById);
+
+    // Write permissions
+    productsTable.grantWriteData(fillTablesLambda);
+    stocksTable.grantWriteData(fillTablesLambda);
+
+
+    // Read-Write permissions
+    productsTable.grantReadWriteData(createProduct);
+    stocksTable.grantReadWriteData(createProduct);
 
     // Create API Gateway
     const api = new apigateway.RestApi(this, 'ProductsApi', {
@@ -52,23 +119,56 @@ export class ProductServiceStack extends cdk.Stack {
         allowHeaders: ['Content-Type'],
         allowCredentials: false
       },
+      defaultMethodOptions: {
+        methodResponses: [{
+          statusCode: '200',
+        }, {
+          statusCode: '400',
+        }, {
+          statusCode: '500',
+        }]
+      }
     });
-
-    // Export the URL
-    this.apiUrl = api.url;
 
     // Create resources and methods
     const products = api.root.addResource('products');
     products.addMethod('GET', new apigateway.LambdaIntegration(getProductsList));
+    products.addMethod('POST', new apigateway.LambdaIntegration(createProduct));
 
     const product = products.addResource('{productId}');
     product.addMethod('GET', new apigateway.LambdaIntegration(getProductById));
 
     console.log('Infrastructure finished');
 
+    new cr.AwsCustomResource(this, 'FillTablesCustomResource', {
+      onCreate: {
+        service: 'Lambda',
+        action: 'invoke',
+        parameters: {
+          FunctionName: fillTablesLambda.functionName,
+          InvocationType: 'RequestResponse'
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('FillTablesCustomResource')
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['lambda:InvokeFunction'],
+          effect: iam.Effect.ALLOW,
+          resources: [fillTablesLambda.functionArn]
+        })
+      ])
+    });
+
+    // Export the URL
+    this.apiUrl = api.url;
+
     // Console API params
     new cdk.CfnOutput(this, 'API URL', { value: api.url });
     new cdk.CfnOutput(this, 'API Gateway ID', { value: api.restApiId });
     new cdk.CfnOutput(this, 'API Gateway Stage', { value: api.deploymentStage.stageName });
+
+    // Tags
+    cdk.Tags.of(this).add('Environment', 'dev');
+    cdk.Tags.of(this).add('Project', 'product-service');
   }
 }

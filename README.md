@@ -27,6 +27,36 @@ This is frontend starter project for nodejs-aws mentoring program. It uses the f
 - Products list (Lambda) - https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev/products
 - Product Item by id (lambda) - https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev/products/7567ec4b-b10c-48c5-9345-fc73c48a80a1
 
+## DynamoDB & Lambdas (task-4)
+- CloudFront - https://d35r08qiuo8xad.cloudfront.net/
+- Products list (Lambda) - https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev/products
+- Product Item by id (lambda) https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev/products/7567ec4b-b10c-48c5-9345-fc73c48a80aa
+- Creation a new products script example (script example below): 
+
+**Request:**
+```bash
+curl -X POST \
+     -H "Content-Type: application/json" \
+     -d '{
+       "title": "New Product",
+       "description": "Product description",
+       "price": 99.99,
+       "count": 10
+     }' \
+     https://tsmdu35c4d.execute-api.eu-west-1.amazonaws.com/dev/products
+```
+
+**Success Response:**
+```json
+{
+  "id": "7567ec4b-b10c-48c5-9345-fc73c48a80aa",
+  "title": "New Product",
+  "description": "Product description",
+  "price": 99.99,
+  "count": 10
+}
+```
+
 ## Available Scripts
 
 ### `start`
