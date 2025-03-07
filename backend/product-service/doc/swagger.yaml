@@ -23,6 +23,34 @@ paths:
                   $ref: '#/components/schemas/Product'
         '500':
           description: Internal server error
+    post:
+      summary: Create new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - price
+                - count
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                price:
+                  type: number
+                count:
+                  type: number
+      responses:
+        201:
+          description: Product created
+        400:
+          description: Invalid input
+        500:
+          description: Internal server error
   /products/{productId}:
     get:
       summary: Get product by ID

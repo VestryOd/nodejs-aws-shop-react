@@ -24,10 +24,10 @@
     "typeRoots": [
       "./node_modules/@types"
     ],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "baseUrl": "./",
-    "paths": {
-      "/opt/nodejs/*": ["src/layers/nodejs/*"]
-    }
   },
   "exclude": [
     "node_modules",
