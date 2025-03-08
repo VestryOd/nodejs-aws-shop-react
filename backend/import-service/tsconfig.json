@@ -1,31 +1,19 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2018",
     "module": "commonjs",
-    "lib": [
-      "es2020",
-      "dom"
-    ],
-    "declaration": true,
+    "lib": ["ES2018"],
+    "moduleResolution": "node",
+    "rootDir": "./src",
+    "outDir": "./dist",
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": false,
-    "inlineSourceMap": true,
-    "inlineSources": true,
-    "experimentalDecorators": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
     "strictPropertyInitialization": false,
-    "typeRoots": [
-      "./node_modules/@types"
-    ]
+    "types": ["node", "jest", "aws-lambda"]
   },
-  "exclude": [
-    "node_modules",
-    "cdk.out"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }
