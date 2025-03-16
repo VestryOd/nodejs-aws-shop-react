@@ -1,4 +1,3 @@
-// src/tests/getProductsList.test.ts
 import { APIGatewayProxyEvent, Context, APIGatewayProxyResult } from 'aws-lambda';
 import { handler } from '../functions/getProductsList';
 import { mockProducts } from '../mocks/products';
@@ -10,9 +9,6 @@ const ddbMock = mockClient(DynamoDBDocumentClient);
 describe('getProductsList lambda', () => {
   beforeEach(() => {
     ddbMock.reset();
-    // Set environment variables for tests
-    process.env.PRODUCTS_TABLE = 'products-table';
-    process.env.STOCKS_TABLE = 'stocks-table';
   });
 
   it('should return all products with stocks', async () => {
