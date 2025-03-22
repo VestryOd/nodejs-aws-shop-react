@@ -4,6 +4,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as path from 'path';
 
@@ -26,6 +27,15 @@ export class ImportServiceStack extends cdk.Stack {
       ],
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For development only
       autoDeleteObjects: true, // For development only
+    });
+
+    // Get reference to existing SQS queue
+    const queueArn = `arn:aws:sqs:${this.region}:${this.account}:catalogItemsQueue`;
+    const queueUrl = `https://sqs.${this.region}.amazonaws.com/${this.account}/catalogItemsQueue`;
+
+    const catalogItemsQueue = sqs.Queue.fromQueueAttributes(this, 'ImportCatalogItemsQueue', {
+      queueUrl,
+      queueArn,
     });
 
     // Create Lambda function
@@ -56,12 +66,17 @@ export class ImportServiceStack extends cdk.Stack {
         BUCKET_NAME: importBucket.bucketName,
         UPLOAD_FOLDER: 'uploaded',
         PARSED_FOLDER: 'parsed',
+        SQS_URL: catalogItemsQueue.queueUrl,
+        REGION: this.region,
       }
     });
 
     // Grant permissions
     importBucket.grantReadWrite(importProductsFile);
     importBucket.grantReadWrite(importFileParser);
+
+    // Grant SQS permissions
+    catalogItemsQueue.grantSendMessages(importFileParser);
 
     // Add S3 event notification for uploaded folder
     importBucket.addEventNotification(

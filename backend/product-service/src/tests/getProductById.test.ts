@@ -3,54 +3,48 @@ import { mockProducts } from '../mocks/products';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { mockClient } from 'aws-sdk-client-mock';
 import { createMockEvent } from "./test-utils";
-
-const ddbMock = mockClient(DynamoDBDocumentClient);
+import * as productModule from '../functions/getProductById';
 
 describe('getProductById lambda', () => {
+  const ddbMock = mockClient(DynamoDBDocumentClient);
+
   beforeEach(() => {
     ddbMock.reset();
-    // Set environment variables for tests
-    process.env.PRODUCTS_TABLE = 'products-table';
-    process.env.STOCKS_TABLE = 'stocks-table';
+    // Ensure the mock is properly applied to the client instance
+    Object.defineProperty(productModule, 'ddbDocClient', {
+      value: ddbMock
+    });
   });
 
   it('should return product by id', async () => {
-    const testProduct = mockProducts[0];
+    const testProduct = {
+      id: 'test-id',
+      title: 'Test Product',
+      description: 'Test Description',
+      price: 100,
+      count: 10
+    };
 
-    // Mock both DynamoDB calls
-    ddbMock
-      .on(GetCommand, {
-        TableName: process.env.PRODUCTS_TABLE,
-        Key: { id: testProduct.id }
-      })
-      .resolves({
-        Item: {
-          id: testProduct.id,
-          title: testProduct.title,
-          description: testProduct.description,
-          price: testProduct.price
-        }
-      });
+    ddbMock.on(GetCommand).resolves({
+      Item: testProduct
+    });
 
-    ddbMock
-      .on(GetCommand, {
-        TableName: process.env.STOCKS_TABLE,
-        Key: { product_id: testProduct.id }
-      })
-      .resolves({
-        Item: {
-          product_id: testProduct.id,
-          count: testProduct.count
-        }
-      });
-
-    const event = createMockEvent({ id: testProduct.id });
+    const event = createMockEvent({ productId: 'test-id' });
     const response = await handler(event);
 
+    // Verify the DynamoDB call
+    expect(ddbMock.calls()).toHaveLength(2);
+    const getCommandInput = ddbMock.calls()[0].args[0].input;
+    expect(getCommandInput).toEqual({
+      TableName: expect.any(String),
+      Key: {
+        id: 'test-id'
+      }
+    });
+
+    // Verify the response
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.id).toBe(testProduct.id);
-    expect(body.count).toBe(testProduct.count);
+    expect(JSON.parse(response.body)).toEqual(testProduct);
   });
 
   it('should return 404 for non-existent product', async () => {
@@ -62,7 +56,7 @@ describe('getProductById lambda', () => {
       })
       .resolves({ Item: undefined });
 
-    const event = createMockEvent({ id: 'non-existent-id' });
+    const event = createMockEvent({ productId: 'non-existent-id' });
     const response = await handler(event);
 
     expect(response.statusCode).toBe(404);
@@ -82,7 +76,7 @@ describe('getProductById lambda', () => {
       .on(GetCommand)
       .rejects(new Error('Database error'));
 
-    const event = createMockEvent({ id: 'some-id' });
+    const event = createMockEvent({ productId: 'some-id' });
     const response = await handler(event);
 
     expect(response.statusCode).toBe(500);

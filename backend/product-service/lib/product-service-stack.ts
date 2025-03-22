@@ -1,11 +1,18 @@
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as path from 'path';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as dotenv from 'dotenv';
+
+dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 export class ProductServiceStack extends cdk.Stack {
   public readonly apiUrl: string;
@@ -24,6 +31,58 @@ export class ProductServiceStack extends cdk.Stack {
       partitionKey: { name: 'product_id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Create SQS Queue
+    const catalogItemsQueue = new sqs.Queue(this, 'CatalogItemsQueue', {
+      queueName: 'catalogItemsQueue',
+      visibilityTimeout: cdk.Duration.seconds(30), // Should be at least 6x the function timeout
+    });
+
+    // Create SNS Topic
+    const createProductTopic = new sns.Topic(this, 'CreateProductTopic', {
+      topicName: 'createProductTopic',
+    });
+
+    // Get emails from environment variables
+    const subscriptionEmail = process.env.SUBSCRIPTION_EMAIL;
+    const filterEmail = process.env.FILTER_EMAIL;
+
+    if (!subscriptionEmail || !filterEmail) {
+      throw new Error('SUBSCRIPTION_EMAIL and FILTER_EMAIL environment variables are required');
+    }
+
+    createProductTopic.addSubscription(
+      new subscriptions.EmailSubscription(subscriptionEmail)
+    );
+
+    // Add filtered subscription (receives only expensive products)
+    createProductTopic.addSubscription(
+      new subscriptions.EmailSubscription(filterEmail, {
+        filterPolicy: {
+          price: sns.SubscriptionFilter.numericFilter({
+            greaterThan: 50,  // Will only receive notifications for products with price > 50
+          }),
+        },
+      })
+    );
+
+    // Create the Lambda function using NodejsFunction
+    const catalogBatchProcess = new NodejsFunction(this, 'CatalogBatchProcess', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../src/functions/catalogBatchProcess/index.ts'),
+      environment: {
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCKS_TABLE: stocksTable.tableName,
+        SNS_TOPIC_ARN: createProductTopic.topicArn,
+        SQS_QUEUE_URL: catalogItemsQueue.queueUrl,
+      },
+      bundling: {
+        externalModules: [
+          'aws-sdk', // Exclude aws-sdk as it's available in the Lambda runtime
+        ],
+      },
     });
 
     // Create script for filling tables
@@ -90,6 +149,28 @@ export class ProductServiceStack extends cdk.Stack {
       logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
+    catalogBatchProcess.addEventSource(new lambdaEventSources.SqsEventSource(catalogItemsQueue, {
+      batchSize: 5,
+    }));
+
+    // Add permissions to the Lambda function's role
+    catalogBatchProcess.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'dynamodb:BatchWriteItem',
+          'dynamodb:PutItem',
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan'
+        ],
+        resources: [
+          productsTable.tableArn,
+          stocksTable.tableArn
+        ]
+      })
+    );
+
     // Grant permissions
     // Read permissions
     productsTable.grantReadData(getProductsList);
@@ -101,11 +182,14 @@ export class ProductServiceStack extends cdk.Stack {
     // Write permissions
     productsTable.grantWriteData(fillTablesLambda);
     stocksTable.grantWriteData(fillTablesLambda);
-
+    productsTable.grantWriteData(catalogBatchProcess);
 
     // Read-Write permissions
     productsTable.grantReadWriteData(createProduct);
     stocksTable.grantReadWriteData(createProduct);
+
+    // Grant SNS publish permissions to the Lambda
+    createProductTopic.grantPublish(catalogBatchProcess);
 
     // Create API Gateway
     const api = new apigateway.RestApi(this, 'ProductsApi', {
