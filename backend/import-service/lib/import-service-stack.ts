@@ -12,6 +12,13 @@ export class ImportServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // Get reference to the authorizer lambda using cross-stack reference
+    const authorizerFn = lambda.Function.fromFunctionArn(
+      this,
+      'BasicAuthorizerFunction',
+      cdk.Fn.importValue('BasicAuthorizerFunctionArn')
+    );
+
     // Create S3 bucket
     const importBucket = new s3.Bucket(this, 'XXXXXXXXXXXX', {
       bucketName: `import-service-bucket-${this.account}`,
@@ -97,11 +104,19 @@ export class ImportServiceStack extends cdk.Stack {
       },
     });
 
+    // Create authorizer
+    const authorizer = new apigateway.RequestAuthorizer(this, 'BasicAuthorizer', {
+      handler: authorizerFn,
+      identitySources: [apigateway.IdentitySource.header('Authorization')],
+      resultsCacheTtl: cdk.Duration.seconds(0), // disable caching
+    });
+
     const importResource = api.root.addResource('import');
     importResource.addMethod('GET', new apigateway.LambdaIntegration(importProductsFile), {
       requestParameters: {
         'method.request.querystring.name': true,
       },
+      authorizer,
     });
 
     // Console API params
