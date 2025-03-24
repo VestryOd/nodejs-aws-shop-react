@@ -80,6 +80,7 @@ export class StaticSiteStack extends cdk.Stack {
     // Output CloudFront URL
     new cdk.CfnOutput(this, 'CloudFrontURL', {
       value: distribution.distributionDomainName,
+      exportName: 'CloudFrontDomainName',
     });
 
     console.log('Stack configuration complete');

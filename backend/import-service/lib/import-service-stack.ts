@@ -7,10 +7,23 @@ import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as path from 'path';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import { Logger } from "@aws-lambda-powertools/logger";
+
+const logger = new Logger();
 
 export class ImportServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    const basicAuthorizerLambdaArn = cdk.Fn.importValue('BasicAuthorizerFunctionArn');
+
+    // Get reference to the authorizer lambda using cross-stack reference
+    const authorizerFn = lambda.Function.fromFunctionArn(
+      this,
+      'BasicAuthorizerFunction',
+      basicAuthorizerLambdaArn
+    );
 
     // Create S3 bucket
     const importBucket = new s3.Bucket(this, 'XXXXXXXXXXXX', {
@@ -48,11 +61,20 @@ export class ImportServiceStack extends cdk.Stack {
       environment: {
         BUCKET_NAME: importBucket.bucketName,
         UPLOAD_FOLDER: 'uploaded', // folder for uploaded files
+        CLOUDFRONT_URL: 'https://d35r08qiuo8xad.cloudfront.net/',
       },
-      bundling: {
-        minify: true,
-        sourceMap: true,
-      },
+      initialPolicy: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'lambda:InvokeFunction',
+            'logs:CreateLogGroup',
+            'logs:CreateLogStream',
+            'logs:PutLogEvents'
+          ],
+          resources: ['*']
+        }),
+      ]
     });
 
     // Create importFileParser Lambda
@@ -85,23 +107,81 @@ export class ImportServiceStack extends cdk.Stack {
       { prefix: 'uploaded/' } // Only trigger for objects in uploaded folder
     );
 
+    const corsOptions = {
+      allowOrigins: apigateway.Cors.ALL_ORIGINS,
+      allowMethods: apigateway.Cors.ALL_METHODS,
+      allowHeaders: [
+        'Content-Type',
+        'X-Amz-Date',
+        'Authorization',
+        'X-Api-Key',
+        'X-Amz-Security-Token',
+      ],
+      allowCredentials: true
+    };
+
     // api
     const api = new apigateway.RestApi(this, 'ImportApi', {
       restApiName: 'Import Service API',
       deployOptions: {
         stageName: 'dev',
       },
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
-      },
+      defaultCorsPreflightOptions: corsOptions,
+    });
+
+    logger.info('CORS configuration', { corsOptions });
+
+    // Log what we can access from the API
+    logger.info('API Gateway configuration', {
+      restApiId: api.restApiId,
+      url: api.url,
+      rootResourceId: api.root.resourceId
+    });
+
+    const authorizer = new cdk.aws_apigateway.CfnAuthorizer(this, 'BasicAuthorizer', {
+      restApiId: api.restApiId,
+      name: 'BasicAuthorizer',
+      type: 'TOKEN',
+      identitySource: 'method.request.header.Authorization',
+      authorizerUri: `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${authorizerFn.functionArn}/invocations`,
+      authorizerResultTtlInSeconds: 0,
+      identityValidationExpression: '^(?:Basic) [-0-9a-zA-Z._~+/]+=*$',
     });
 
     const importResource = api.root.addResource('import');
-    importResource.addMethod('GET', new apigateway.LambdaIntegration(importProductsFile), {
-      requestParameters: {
-        'method.request.querystring.name': true,
+
+    importResource.addMethod('GET',
+      new apigateway.LambdaIntegration(importProductsFile),
+      {
+        authorizer: {
+          authorizerId: authorizer.ref
+        },
+        authorizationType: apigateway.AuthorizationType.CUSTOM
+      }
+    );
+
+    api.addGatewayResponse('Unauthorized', {
+      type: apigateway.ResponseType.UNAUTHORIZED,
+      statusCode: '401',
+      responseHeaders: {
+        'Access-Control-Allow-Origin': "'*'",
+        'Access-Control-Allow-Headers': "'Content-Type,Authorization'",
       },
+      templates: {
+        'application/json': '{"message": "Unauthorized", "statusCode": 401}'
+      }
+    });
+
+    api.addGatewayResponse('Forbidden', {
+      type: apigateway.ResponseType.ACCESS_DENIED,
+      statusCode: '403',
+      responseHeaders: {
+        'Access-Control-Allow-Origin': "'*'",
+        'Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+      },
+      templates: {
+        'application/json': '{"message": "Forbidden", "statusCode": 403}'
+      }
     });
 
     // Console API params

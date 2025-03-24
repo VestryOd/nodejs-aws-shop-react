@@ -7,8 +7,12 @@ import PageProductImport from "~/components/pages/admin/PageProductImport/PagePr
 import PageCart from "~/components/pages/PageCart/PageCart";
 import PageProducts from "~/components/pages/PageProducts/PageProducts";
 import { Typography } from "@mui/material";
+import { useAuthInit } from "~/utils/useAuthInit";
+import { useGlobalErrors } from "~/utils/useGlobalErrors";
 
 function App() {
+  useAuthInit();
+  useGlobalErrors();
   return (
     <MainLayout>
       <Routes>
