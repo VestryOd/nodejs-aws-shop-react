@@ -2,6 +2,8 @@ import axios from "axios";
 import React, { useRef } from "react";
 import Box from "@mui/material/Box";
 import { Button } from "@mui/material";
+import { useInvalidateAvailableProducts } from "~/queries/products";
+import { emitError } from "~/utils/emitError";
 
 type CSVFileImportProps = {
   url: string;
@@ -11,6 +13,7 @@ type CSVFileImportProps = {
 export default function CSVFileImport({ url }: CSVFileImportProps) {
   const [file, setFile] = React.useState<File>();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const invalidateAvailableProducts = useInvalidateAvailableProducts();
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -31,6 +34,7 @@ export default function CSVFileImport({ url }: CSVFileImportProps) {
       if (!file) {
         throw new Error("No file selected");
       }
+      const token = localStorage.getItem("authorization_token");
       // Get the presigned URL
       const response = await axios({
         method: "GET",
@@ -38,6 +42,11 @@ export default function CSVFileImport({ url }: CSVFileImportProps) {
         params: {
           name: encodeURIComponent(file.name),
         },
+        headers: token
+          ? {
+              Authorization: `Basic ${token}`,
+            }
+          : {},
       });
       console.log("File to upload: ", file.name);
       console.log("Uploading to: ", response.data);
@@ -46,9 +55,11 @@ export default function CSVFileImport({ url }: CSVFileImportProps) {
         body: file,
       });
       console.log("Result: ", result);
+      await invalidateAvailableProducts();
       setFile(undefined);
-    } catch (error) {
-      console.error("There was an error uploading the file", error);
+    } catch (error: any) {
+      console.error("There was an error uploading the file::", error);
+      emitError(error);
     }
   };
   return (
